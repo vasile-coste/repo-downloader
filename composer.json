@@ -1,0 +1,17 @@
+{
+    "name": "vasile-coste/repo-downloader",
+    "description": "Downloads release assets from the GitHub repositories listed in repos.json.",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.4",
+        "ext-json": "*",
+        "guzzlehttp/guzzle": "^7.9"
+    },
+    "config": {
+        "platform": {
+            "php": "8.4"
+        },
+        "sort-packages": true
+    }
+}

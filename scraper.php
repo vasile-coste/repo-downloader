@@ -14,7 +14,7 @@
  *   --all       process every release instead of only the latest one
  *   --limit=N   with --all, process at most N most recent releases
  *   --dry-run   only print what would be downloaded
- *   --out=DIR   output directory (default: script directory)
+ *   --out=DIR   output directory (default: download/ next to the script)
  *   --repos=FILE repos list (default: repos.json next to the script)
  *
  * Set GITHUB_TOKEN in the environment to raise the API rate limit (60/h -> 5000/h).
@@ -22,14 +22,26 @@
 
 declare(strict_types=1);
 
+use GuzzleHttp\Client;
+use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\RequestOptions;
+
+if (PHP_VERSION_ID < 80400) {
+    fwrite(STDERR, 'Error: PHP 8.4 or newer is required, found ' . PHP_VERSION . PHP_EOL);
+    exit(1);
+}
+
+require __DIR__ . '/vendor/autoload.php';
+
 const API = 'https://api.github.com';
+
 const USER_AGENT = 'repo-downloader-scraper';
 
 $opts = getopt('', ['all', 'limit:', 'dry-run', 'out:', 'repos:']);
 $allReleases = isset($opts['all']);
 $limit = isset($opts['limit']) ? max(1, (int) $opts['limit']) : null;
 $dryRun = isset($opts['dry-run']);
-$outDir = rtrim($opts['out'] ?? __DIR__, '/');
+$outDir = rtrim($opts['out'] ?? __DIR__ . '/download', '/');
 $reposFile = $opts['repos'] ?? __DIR__ . '/repos.json';
 $token = getenv('GITHUB_TOKEN') ?: null;
 
@@ -288,22 +300,17 @@ function fetchAllReleases(string $owner, string $repo, ?string $token, ?int $lim
 
 function apiGet(string $path, ?string $token): array
 {
-    $ch = curl_init(API . $path);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_HTTPHEADER     => headers($token, 'application/vnd.github+json'),
-        CURLOPT_TIMEOUT        => 30,
-    ]);
-    $body = curl_exec($ch);
-    $status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    $err = curl_error($ch);
-    curl_close($ch);
-
-    if ($body === false) {
-        throw new RuntimeException("API request failed: $err");
+    try {
+        $response = http()->get(API . $path, [
+            RequestOptions::HEADERS     => headers($token, 'application/vnd.github+json'),
+            RequestOptions::TIMEOUT     => 30,
+            RequestOptions::HTTP_ERRORS => false,
+        ]);
+    } catch (GuzzleException $e) {
+        throw new RuntimeException("API request failed: " . $e->getMessage());
     }
-    $data = json_decode($body, true);
+    $status = $response->getStatusCode();
+    $data = json_decode((string) $response->getBody(), true);
     if ($status !== 200 || !is_array($data)) {
         $msg = is_array($data) ? ($data['message'] ?? '') : '';
         throw new RuntimeException("API $path returned HTTP $status" . ($msg ? ": $msg" : ''));
@@ -318,40 +325,37 @@ function apiGet(string $path, ?string $token): array
 function download(string $url, string $target, ?string $token, bool $isAsset): void
 {
     $tmp = "$target.part";
-    $fh = fopen($tmp, 'wb');
-    if (!$fh) {
-        throw new RuntimeException("cannot write $tmp");
-    }
-
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_FILE           => $fh,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_HTTPHEADER     => headers($token, $isAsset ? 'application/octet-stream' : 'application/vnd.github+json'),
-        CURLOPT_CONNECTTIMEOUT => 30,
-        CURLOPT_LOW_SPEED_LIMIT => 1024,
-        CURLOPT_LOW_SPEED_TIME  => 60,
-        CURLOPT_FAILONERROR    => true,
-        CURLOPT_UNRESTRICTED_AUTH => false,
-    ]);
-    $ok = curl_exec($ch);
-    $err = curl_error($ch);
-    curl_close($ch);
-    fclose($fh);
-
-    if (!$ok) {
+    try {
+        http()->get($url, [
+            RequestOptions::SINK            => $tmp,
+            RequestOptions::HEADERS         => headers($token, $isAsset ? 'application/octet-stream' : 'application/vnd.github+json'),
+            RequestOptions::CONNECT_TIMEOUT => 30,
+            // Abort when the transfer stalls below 1 KB/s for 60 s.
+            'curl'                          => [CURLOPT_LOW_SPEED_LIMIT => 1024, CURLOPT_LOW_SPEED_TIME => 60],
+        ]);
+    } catch (GuzzleException $e) {
         @unlink($tmp);
-        throw new RuntimeException("download failed: $err");
+        throw new RuntimeException("download failed: " . $e->getMessage());
     }
     rename($tmp, $target);
     logLine(sprintf("       %s (%.1f MB)", basename($target), filesize($target) / 1048576));
 }
 
+/**
+ * Shared client. Guzzle follows redirects and drops the Authorization header
+ * when a redirect leaves the original host (asset downloads redirect to a CDN).
+ */
+function http(): Client
+{
+    static $client = new Client([RequestOptions::ALLOW_REDIRECTS => ['max' => 10]]);
+    return $client;
+}
+
 function headers(?string $token, string $accept): array
 {
-    $h = ["Accept: $accept", 'User-Agent: ' . USER_AGENT, 'X-GitHub-Api-Version: 2022-11-28'];
+    $h = ['Accept' => $accept, 'User-Agent' => USER_AGENT, 'X-GitHub-Api-Version' => '2022-11-28'];
     if ($token) {
-        $h[] = "Authorization: Bearer $token";
+        $h['Authorization'] = "Bearer $token";
     }
     return $h;
 }
