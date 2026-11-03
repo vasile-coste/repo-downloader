@@ -94,14 +94,26 @@ function processRelease(array $release, string $repo, string $outDir, ?string $t
             'kind' => 'source',
         ];
     }
+    $uncategorizedAssets = false;
     foreach (pickWindows($assets) as $a) {
         $downloads[] = assetDownload($a, 'windows');
+        $uncategorizedAssets = true;
     }
     if ($a = pickMac($assets)) {
         $downloads[] = assetDownload($a, 'macos');
+        $uncategorizedAssets = true;
     }
     if ($a = pickAndroid($assets)) {
         $downloads[] = assetDownload($a, 'android');
+        $uncategorizedAssets = true;
+    }
+
+    if (!$uncategorizedAssets && !empty($assets[0]['browser_download_url'])) {
+        $downloads[] = [
+            'name' => safeName($repo) . '-' . $version . '-uncategorized.zip',
+            'url'  => $assets[0]['browser_download_url'],
+            'kind' => 'uncategorized',
+        ];
     }
 
     foreach ($downloads as $d) {
