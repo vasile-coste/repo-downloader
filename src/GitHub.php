@@ -50,21 +50,6 @@ final class GitHub
         return null;
     }
 
-    /** All non-draft releases, newest first, optionally only the first $limit. */
-    public function allReleases(string $owner, string $repo, ?int $limit = null): array
-    {
-        $all = [];
-        for ($page = 1; ; $page++) {
-            $batch = $this->get("/repos/$owner/$repo/releases?per_page=100&page=$page");
-            $batch = array_values(array_filter($batch, fn($r) => empty($r['draft'])));
-            array_push($all, ...$batch);
-            if (count($batch) < 100 || ($limit && count($all) >= $limit)) {
-                break;
-            }
-        }
-        return $limit ? array_slice($all, 0, $limit) : $all;
-    }
-
     /**
      * Streams a file to disk via a .part file. Release assets are fetched through
      * their API url with Accept: application/octet-stream so private repos work too.

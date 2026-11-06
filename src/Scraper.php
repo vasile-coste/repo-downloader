@@ -7,17 +7,16 @@ namespace RepoDownloader;
 use RuntimeException;
 
 /**
- * Walks the repo list and decides which releases to download: every release
- * with $allReleases, otherwise the latest one, falling back to the latest
- * prerelease when there is no stable release or it is already downloaded.
+ * Walks the repo list and downloads the latest release of each repo, falling
+ * back to the latest prerelease when there is no stable release or it is
+ * already downloaded.
  */
 final class Scraper
 {
     public function __construct(
         private readonly GitHub $github,
         private readonly ReleaseDownloader $downloader,
-        private readonly bool $allReleases = false,
-        private readonly ?int $limit = null,
+        private readonly bool $prerelease = true,
     ) {
     }
 
@@ -33,29 +32,26 @@ final class Scraper
             Console::line("== $owner/$repo");
 
             try {
-                $this->allReleases ? $this->scrapeAll($owner, $repo) : $this->scrapeLatest($owner, $repo);
+                $this->scrape($owner, $repo);
             } catch (RuntimeException $e) {
                 Console::line("  ! " . $e->getMessage());
             }
         }
     }
 
-    private function scrapeAll(string $owner, string $repo): void
-    {
-        foreach ($this->github->allReleases($owner, $repo, $this->limit) as $release) {
-            $this->downloader->process($release, $repo);
-        }
-    }
-
-    private function scrapeLatest(string $owner, string $repo): void
+    private function scrape(string $owner, string $repo): void
     {
         $latest = $this->github->latestRelease($owner, $repo);
         if (!$latest) {
-            Console::line("  no stable release, looking for a prerelease");
+            Console::line("  no stable release");
         } elseif ($this->downloader->process($latest, $repo) > 0) {
             return;
         }
+        if (!$this->prerelease) {
+            return;
+        }
 
+        // Only the newest prerelease, never older ones.
         $pre = $this->github->latestPrerelease($owner, $repo);
         if (!$pre) {
             Console::line("  no prerelease found");

@@ -6,16 +6,15 @@
  * the source code zip and the platform builds configured in config.php
  * (by default Windows x64 + arm64, macOS universal, Android arm64).
  *
- * Without --all, the latest prerelease is downloaded instead when the repo has
- * no stable release, or when the latest stable release is already downloaded
- * and a newer prerelease exists. Prerelease files get a "-prerelease" suffix.
+ * Only the latest release is downloaded. The latest prerelease is downloaded
+ * instead when the repo has no stable release, or when the latest stable
+ * release is already downloaded and a newer prerelease exists (turn this off
+ * with --no-prerelease). Prerelease files get a "-prerelease" suffix.
  *
  * Usage:
- *   php scraper.php [--all] [--limit=N] [--dry-run] [--out=DIR] [--repos=FILE]
- *                   [--config=FILE] [--platforms=LIST] [--arch=LIST] [--no-source]
+ *   php scraper.php [--dry-run] [--out=DIR] [--repos=FILE] [--config=FILE]
+ *                   [--platforms=LIST] [--arch=LIST] [--no-source] [--no-prerelease]
  *
- *   --all       process every release instead of only the latest one
- *   --limit=N   with --all, process at most N most recent releases
  *   --dry-run   only print what would be downloaded
  *   --out=DIR   output directory (default: download/ next to the script)
  *   --repos=FILE repos list (default: repos.json next to the script)
@@ -23,6 +22,7 @@
  *   --platforms=LIST only these platforms, e.g. --platforms=windows,android
  *   --arch=LIST     these architectures for every platform, e.g. --arch=arm64,x64
  *   --no-source     skip the source code zip
+ *   --no-prerelease never fall back to the latest prerelease
  *
  * The code lives in src/ (RepoDownloader namespace); this file only wires it up.
  *
@@ -44,13 +44,16 @@ if (PHP_VERSION_ID < 80400) {
 
 require __DIR__ . '/vendor/autoload.php';
 
-$opts = getopt('', ['all', 'limit:', 'dry-run', 'out:', 'repos:', 'config:', 'platforms:', 'arch:', 'no-source']);
+$opts = getopt('', ['dry-run', 'out:', 'repos:', 'config:', 'platforms:', 'arch:', 'no-source', 'no-prerelease']);
 $csv = fn(string $value) => array_values(array_filter(array_map(fn($v) => strtolower(trim($v)), explode(',', $value))));
 
 try {
     $config = Config::load($opts['config'] ?? __DIR__ . '/config.php');
     if (isset($opts['no-source'])) {
         $config->source = false;
+    }
+    if (isset($opts['no-prerelease'])) {
+        $config->prerelease = false;
     }
     if (isset($opts['platforms'])) {
         $config->onlyPlatforms($csv($opts['platforms']));
@@ -75,10 +78,4 @@ $downloader = new ReleaseDownloader(
     outDir: rtrim($opts['out'] ?? __DIR__ . '/download', '/'),
     dryRun: isset($opts['dry-run']),
 );
-$scraper = new Scraper(
-    $github,
-    $downloader,
-    allReleases: isset($opts['all']),
-    limit: isset($opts['limit']) ? max(1, (int) $opts['limit']) : null,
-);
-$scraper->run($repos);
+(new Scraper($github, $downloader, prerelease: $config->prerelease))->run($repos);

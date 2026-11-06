@@ -16,12 +16,14 @@ Assets that don't exist for a release are skipped. Checksums, signatures and oth
 
 ### Prereleases
 
-Without `--all`, the script downloads the latest prerelease instead of the latest release when:
+The script only downloads the latest release of each repo. It downloads the latest prerelease instead when:
 
 - the repo has no stable release at all (e.g. a repo that only publishes prereleases), or
 - the latest stable release is already downloaded and a newer prerelease exists.
 
-Prerelease files go into `{version}-prerelease/` and get `-prerelease` added before the extension, e.g. `download/Lichii/build-88-prerelease/lichii-macos-arm64-prerelease.dmg`. With `--all`, prereleases are downloaded along with every other release and named the same way.
+Prerelease files go into `{version}-prerelease/` and get `-prerelease` added before the extension, e.g. `download/Lichii/build-88-prerelease/lichii-macos-arm64-prerelease.dmg`.
+
+Turn this off with `--no-prerelease`, or `'prerelease' => false` in [`config.php`](config.php).
 
 ## Requirements
 
@@ -57,8 +59,6 @@ php -m | grep -E 'curl|json'
 
 ```bash
 php scraper.php                   # latest release of every repo
-php scraper.php --all             # every release
-php scraper.php --all --limit=5   # the 5 most recent releases
 php scraper.php --dry-run         # list what would be downloaded, download nothing
 php scraper.php --out=/some/dir   # save downloads somewhere else
 php scraper.php --repos=other.json
@@ -69,8 +69,6 @@ php scraper.php --no-source                    # skip the source code zip
 
 | Option | Description |
 |---|---|
-| `--all` | Process every release, including prereleases, instead of only the latest one. Draft releases are skipped. |
-| `--limit=N` | With `--all`, only the N most recent releases. |
 | `--dry-run` | Print what would be downloaded without downloading. |
 | `--out=DIR` | Output directory. Default: `download/` next to the script. |
 | `--repos=FILE` | Repo list to read. Default: `repos.json` next to the script. |
@@ -78,6 +76,7 @@ php scraper.php --no-source                    # skip the source code zip
 | `--platforms=LIST` | Only download these platforms (comma separated), ignoring `enabled` in the config. |
 | `--arch=LIST` | Download these architectures (comma separated) for every platform, ignoring `arch` in the config. |
 | `--no-source` | Don't download the source code zip. |
+| `--no-prerelease` | Never fall back to the latest prerelease (see [Prereleases](#prereleases)). |
 
 ## Configuration
 
@@ -121,7 +120,7 @@ Running the script again is safe: files that already exist are skipped, so only 
 
 ## GitHub token
 
-Without a token GitHub allows 60 API requests per hour. Each repo uses about one request (more with `--all` on repos with hundreds of releases), so a token is only needed for long repo lists or private repos. With a token the limit is 5,000 per hour.
+Without a token GitHub allows 60 API requests per hour. Each repo uses one or two requests (two when it checks for a prerelease), so a token is only needed for long repo lists or private repos. With a token the limit is 5,000 per hour.
 
 1. Create a token at <https://github.com/settings/tokens>:
    - **Fine-grained token**: "Public repositories (read-only)" is enough for public repos.

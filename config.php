@@ -24,12 +24,17 @@
  * Disabled platforms still recognise their files, so e.g. a macOS .zip is
  * never mistaken for something else.
  *
- * Command-line options override this file for one run, see scraper.php --help.
+ * Command-line options override this file for one run, see the top of scraper.php.
  */
 
 return [
     // The release's source code zip.
     'source' => true,
+
+    // Download the latest prerelease when the repo has no stable release, or
+    // when the latest stable release is already downloaded and a newer
+    // prerelease exists.
+    'prerelease' => true,
 
     // When no file of a release matches any platform below, download its first
     // asset as "{repo}-{version}-uncategorized.zip".

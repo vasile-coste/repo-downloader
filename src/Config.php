@@ -13,6 +13,7 @@ final class Config
     public function __construct(
         public bool $source = true,
         public bool $uncategorized = true,
+        public bool $prerelease = true,
         public array $platforms = [],
     ) {
     }
@@ -30,6 +31,7 @@ final class Config
         return new self(
             source: (bool) ($data['source'] ?? true),
             uncategorized: (bool) ($data['uncategorized'] ?? true),
+            prerelease: (bool) ($data['prerelease'] ?? true),
             platforms: $platforms,
         );
     }
