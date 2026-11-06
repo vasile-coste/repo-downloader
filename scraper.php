@@ -8,6 +8,10 @@
  *   - macOS: universal .dmg preferred, otherwise a .zip
  *   - Android: arm64-v8a .apk preferred
  *
+ * Without --all, the latest prerelease is downloaded instead when the repo has
+ * no stable release, or when the latest stable release is already downloaded
+ * and a newer prerelease exists. Prerelease files get a "-prerelease" suffix.
+ *
  * Usage:
  *   php scraper.php [--all] [--limit=N] [--dry-run] [--out=DIR] [--repos=FILE]
  *
@@ -59,26 +63,52 @@ foreach ($repos as $url) {
     logLine("== $owner/$repo");
 
     try {
-        $releases = $allReleases
-            ? fetchAllReleases($owner, $repo, $token, $limit)
-            : [apiGet("/repos/$owner/$repo/releases/latest", $token)];
+        if ($allReleases) {
+            foreach (fetchAllReleases($owner, $repo, $token, $limit) as $release) {
+                processRelease($release, $repo, $outDir, $token, $dryRun);
+            }
+            continue;
+        }
+
+        try {
+            $latest = apiGet("/repos/$owner/$repo/releases/latest", $token);
+        } catch (RuntimeException $e) {
+            if ($e->getCode() !== 404) {
+                throw $e;
+            }
+            $latest = null;
+            logLine("  no stable release, looking for a prerelease");
+        }
+
+        if ($latest && processRelease($latest, $repo, $outDir, $token, $dryRun) > 0) {
+            continue;
+        }
+
+        $pre = fetchLatestPrerelease($owner, $repo, $token);
+        if (!$pre) {
+            logLine("  no prerelease found");
+        } elseif ($latest && ($pre['published_at'] ?? '') <= ($latest['published_at'] ?? '')) {
+            logLine("  latest prerelease {$pre['tag_name']} is older than the stable release, skipping");
+        } else {
+            processRelease($pre, $repo, $outDir, $token, $dryRun);
+        }
     } catch (RuntimeException $e) {
         logLine("  ! " . $e->getMessage());
-        continue;
-    }
-
-    foreach ($releases as $release) {
-        processRelease($release, $repo, $outDir, $token, $dryRun);
     }
 }
 
 // ---------------------------------------------------------------------------
 
-function processRelease(array $release, string $repo, string $outDir, ?string $token, bool $dryRun): void
+/**
+ * Downloads the picked files of a release and returns how many were missing
+ * (i.e. downloaded, or would be with --dry-run). 0 means it was already complete.
+ */
+function processRelease(array $release, string $repo, string $outDir, ?string $token, bool $dryRun): int
 {
+    $isPre = !empty($release['prerelease']);
     $version = releaseVersion($release);
-    $dir = "$outDir/" . safeName($repo) . "/$version";
-    logLine("  -- release " . ($release['tag_name'] ?? '?') . " -> $dir");
+    $dir = "$outDir/" . safeName($repo) . "/$version" . ($isPre ? '-prerelease' : '');
+    logLine("  -- " . ($isPre ? 'prerelease ' : 'release ') . ($release['tag_name'] ?? '?') . " -> $dir");
 
     $assets = array_values(array_filter(
         $release['assets'] ?? [],
@@ -116,19 +146,24 @@ function processRelease(array $release, string $repo, string $outDir, ?string $t
         ];
     }
 
+    $missing = 0;
     foreach ($downloads as $d) {
+        if ($isPre) {
+            $d['name'] = withSuffix($d['name'], '-prerelease');
+        }
         $target = "$dir/" . safeName($d['name']);
         if (is_file($target) && filesize($target) > 0) {
             logLine("     = [{$d['kind']}] {$d['name']} (already downloaded)");
             continue;
         }
         logLine("     + [{$d['kind']}] {$d['name']}");
+        $missing++;
         if ($dryRun) {
             continue;
         }
         if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
             logLine("     ! cannot create $dir");
-            return;
+            return $missing;
         }
         try {
             download($d['url'], $target, $token, $d['kind'] !== 'source');
@@ -136,6 +171,7 @@ function processRelease(array $release, string $repo, string $outDir, ?string $t
             logLine("     ! " . $e->getMessage());
         }
     }
+    return $missing;
 }
 
 function assetDownload(array $asset, string $kind): array
@@ -310,6 +346,17 @@ function fetchAllReleases(string $owner, string $repo, ?string $token, ?int $lim
     return $limit ? array_slice($all, 0, $limit) : $all;
 }
 
+/** Newest non-draft prerelease, or null. The API lists releases newest first. */
+function fetchLatestPrerelease(string $owner, string $repo, ?string $token): ?array
+{
+    foreach (apiGet("/repos/$owner/$repo/releases?per_page=30", $token) as $r) {
+        if (!empty($r['prerelease']) && empty($r['draft'])) {
+            return $r;
+        }
+    }
+    return null;
+}
+
 function apiGet(string $path, ?string $token): array
 {
     try {
@@ -325,7 +372,7 @@ function apiGet(string $path, ?string $token): array
     $data = json_decode((string) $response->getBody(), true);
     if ($status !== 200 || !is_array($data)) {
         $msg = is_array($data) ? ($data['message'] ?? '') : '';
-        throw new RuntimeException("API $path returned HTTP $status" . ($msg ? ": $msg" : ''));
+        throw new RuntimeException("API $path returned HTTP $status" . ($msg ? ": $msg" : ''), $status);
     }
     return $data;
 }
@@ -377,6 +424,12 @@ function headers(?string $token, string $accept): array
 function safeName(string $name): string
 {
     return trim(preg_replace('/[^A-Za-z0-9._+-]+/', '_', $name), '._') ?: 'unnamed';
+}
+
+/** Inserts $suffix before the extension: app.tar.gz -> app-prerelease.tar.gz */
+function withSuffix(string $name, string $suffix): string
+{
+    return preg_replace('/(\.tar\.(gz|xz|bz2|zst)|\.[A-Za-z0-9]{1,10})?$/i', $suffix . '$1', $name, 1);
 }
 
 function logLine(string $msg): void

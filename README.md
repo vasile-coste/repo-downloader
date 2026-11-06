@@ -13,6 +13,15 @@ For each release it downloads:
 
 Assets that don't exist for a release are skipped. Checksums, signatures and other metadata files (`.sha256`, `.sig`, `.blockmap`, `.yml`, …) are never downloaded.
 
+### Prereleases
+
+Without `--all`, the script downloads the latest prerelease instead of the latest release when:
+
+- the repo has no stable release at all (e.g. a repo that only publishes prereleases), or
+- the latest stable release is already downloaded and a newer prerelease exists.
+
+Prerelease files go into `{version}-prerelease/` and get `-prerelease` added before the extension, e.g. `download/Lichii/build-88-prerelease/lichii-macos-arm64-prerelease.dmg`. With `--all`, prereleases are downloaded along with every other release and named the same way.
+
 ## Requirements
 
 - PHP 8.4 or newer, with the `curl` and `json` extensions
@@ -56,7 +65,7 @@ php scraper.php --repos=other.json
 
 | Option | Description |
 |---|---|
-| `--all` | Process every release instead of only the latest one. Draft releases are skipped. |
+| `--all` | Process every release, including prereleases, instead of only the latest one. Draft releases are skipped. |
 | `--limit=N` | With `--all`, only the N most recent releases. |
 | `--dry-run` | Print what would be downloaded without downloading. |
 | `--out=DIR` | Output directory. Default: `download/` next to the script. |
