@@ -8,6 +8,11 @@
         "ext-json": "*",
         "guzzlehttp/guzzle": "^7.9"
     },
+    "autoload": {
+        "psr-4": {
+            "RepoDownloader\\": "src/"
+        }
+    },
     "config": {
         "platform": {
             "php": "8.4"

@@ -2,14 +2,15 @@
 
 A PHP script that downloads release assets from the GitHub repositories listed in `repos.json`.
 
-For each release it downloads:
+For each release it downloads the source code zip and the platform builds set in [`config.php`](config.php). By default:
 
 | Asset | What gets picked |
 |---|---|
 | Source code | The release's source code zip |
-| Windows | x64 and arm64 builds when several exist; installers (`.exe`, `.msi`) before zips; portable and 32-bit builds are ignored |
-| macOS | Universal `.dmg`, otherwise universal `.zip`, otherwise any `.dmg`/mac `.zip` |
-| Android | `arm64-v8a` APK, otherwise universal, otherwise a release APK, otherwise any APK |
+| Windows | x64 and arm64 builds; installers (`.exe`, `.msi`) before zips; portable builds are ignored |
+| macOS | Universal build, `.dmg` before `.zip` |
+| Android | `arm64-v8a` APK, otherwise a universal one |
+| Linux | Off by default; x64 AppImage, otherwise `.deb`/`.rpm`/archive |
 
 Assets that don't exist for a release are skipped. Checksums, signatures and other metadata files (`.sha256`, `.sig`, `.blockmap`, `.yml`, …) are never downloaded.
 
@@ -61,6 +62,9 @@ php scraper.php --all --limit=5   # the 5 most recent releases
 php scraper.php --dry-run         # list what would be downloaded, download nothing
 php scraper.php --out=/some/dir   # save downloads somewhere else
 php scraper.php --repos=other.json
+php scraper.php --platforms=android            # only Android builds
+php scraper.php --platforms=windows,linux --arch=x64
+php scraper.php --no-source                    # skip the source code zip
 ```
 
 | Option | Description |
@@ -70,6 +74,36 @@ php scraper.php --repos=other.json
 | `--dry-run` | Print what would be downloaded without downloading. |
 | `--out=DIR` | Output directory. Default: `download/` next to the script. |
 | `--repos=FILE` | Repo list to read. Default: `repos.json` next to the script. |
+| `--config=FILE` | Download settings to use. Default: `config.php` next to the script. |
+| `--platforms=LIST` | Only download these platforms (comma separated), ignoring `enabled` in the config. |
+| `--arch=LIST` | Download these architectures (comma separated) for every platform, ignoring `arch` in the config. |
+| `--no-source` | Don't download the source code zip. |
+
+## Configuration
+
+[`config.php`](config.php) decides what gets downloaded. Each platform has its own block:
+
+```php
+'windows' => [
+    'enabled'  => true,                        // download this platform
+    'arch'     => ['x64', 'arm64'],            // one build per architecture, [] = best single build
+    'untagged' => 'x64',                       // architecture of files with none in their name
+    'fallback' => true,                        // no listed arch found: take the best other build
+    'formats'  => ['exe', 'msi', 'zip', '7z'], // accepted file types, most preferred first
+    'keywords' => ['win', 'windows'],          // words in a file name that mark this platform
+    'exclude'  => ['portable'],                // skip files containing these words
+    'prefer'   => [],                          // tie-breaker: prefer files containing these words
+],
+```
+
+Architectures: `x64`, `x86`, `arm64`, `arm` (32-bit), `universal`. Common aliases such as `amd64`, `x86_64`, `aarch64`, `arm64-v8a` and `armv7` are accepted too.
+
+To add a platform, add another block. Files are matched to a platform by a keyword in their name plus an accepted format, or by a format only that platform uses (`.exe`, `.dmg`, `.apk`, …).
+
+Examples:
+
+- Android only, 32-bit and 64-bit ARM: set `enabled` to `false` everywhere except `android`, and its `arch` to `['arm64', 'arm']`.
+- Skip libretro cores on every platform: add `'libretro'` to each `exclude` list.
 
 ## Output layout
 
