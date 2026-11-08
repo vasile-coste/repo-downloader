@@ -23,7 +23,11 @@ final class Scraper
     /** @param list<string> $urls GitHub repo or /releases URLs */
     public function run(array $urls): void
     {
+        $contor = 0;
+        $total = count($urls);
         foreach ($urls as $url) {
+            $contor ++;
+            Console::line("Scraping repo $contor / $total ...");
             if (!preg_match('~github\.com/([^/\s]+)/([^/\s#?]+)~i', (string) $url, $m)) {
                 Console::line("! Skipping unrecognised URL: $url");
                 continue;
