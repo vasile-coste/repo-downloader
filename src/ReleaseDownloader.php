@@ -10,7 +10,6 @@ use RuntimeException;
 final class ReleaseDownloader
 {
     public function __construct(
-        private readonly GitHub $github,
         private readonly Config $config,
         private readonly string $outDir,
         private readonly bool $dryRun = false,
@@ -21,7 +20,7 @@ final class ReleaseDownloader
      * Returns how many files were missing (i.e. downloaded, or would be with
      * --dry-run). 0 means the release was already complete.
      */
-    public function process(array $release, string $repo): int
+    public function process(ReleaseHost $host, array $release, string $repo): int
     {
         $isPre = !empty($release['prerelease']);
         $version = self::version($release);
@@ -48,7 +47,7 @@ final class ReleaseDownloader
                 return $missing;
             }
             try {
-                $this->github->download($d['url'], $target, $d['kind'] !== 'source');
+                $host->download($d['url'], $target, $d['kind'] !== 'source');
                 Console::line(sprintf("       %s (%.1f MB)", basename($target), filesize($target) / 1048576));
             } catch (RuntimeException $e) {
                 Console::line("     ! " . $e->getMessage());

@@ -1,6 +1,6 @@
 {
     "name": "vasile-coste/repo-downloader",
-    "description": "Downloads release assets from the GitHub repositories listed in repos.json.",
+    "description": "Downloads release assets from the GitHub, Gitea/Forgejo and GitLab repositories listed in github.json and gitlab.json.",
     "type": "project",
     "license": "proprietary",
     "require": {

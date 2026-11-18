@@ -14,13 +14,13 @@ use RuntimeException;
 final class Scraper
 {
     public function __construct(
-        private readonly GitHub $github,
+        private readonly Hosts $hosts,
         private readonly ReleaseDownloader $downloader,
         private readonly bool $prerelease = true,
     ) {
     }
 
-    /** @param list<string> $urls GitHub repo or /releases URLs */
+    /** @param list<string> $urls repo or /releases URLs (GitHub, Gitea/Forgejo, GitLab) */
     public function run(array $urls): void
     {
         $contor = 0;
@@ -28,27 +28,27 @@ final class Scraper
         foreach ($urls as $url) {
             $contor ++;
             Console::line("Scraping repo $contor / $total ...");
-            if (!preg_match('~github\.com/([^/\s]+)/([^/\s#?]+)~i', (string) $url, $m)) {
-                Console::line("! Skipping unrecognised URL: $url");
-                continue;
-            }
-            [$owner, $repo] = [$m[1], preg_replace('/\.git$/', '', $m[2])];
-            Console::line("== $owner/$repo");
-
             try {
-                $this->scrape($owner, $repo);
+                $target = $this->hosts->resolve((string) $url);
+                if (!$target) {
+                    Console::line("! Skipping unrecognised URL: $url");
+                    continue;
+                }
+                ['host' => $host, 'owner' => $owner, 'repo' => $repo] = $target;
+                Console::line("== $owner/$repo (" . parse_url((string) $url, PHP_URL_HOST) . ")");
+                $this->scrape($host, $owner, $repo);
             } catch (RuntimeException $e) {
                 Console::line("  ! " . $e->getMessage());
             }
         }
     }
 
-    private function scrape(string $owner, string $repo): void
+    private function scrape(ReleaseHost $host, string $owner, string $repo): void
     {
-        $latest = $this->github->latestRelease($owner, $repo);
+        $latest = $host->latestRelease($owner, $repo);
         if (!$latest) {
             Console::line("  no stable release");
-        } elseif ($this->downloader->process($latest, $repo) > 0) {
+        } elseif ($this->downloader->process($host, $latest, $repo) > 0) {
             return;
         }
         if (!$this->prerelease) {
@@ -56,13 +56,13 @@ final class Scraper
         }
 
         // Only the newest prerelease, never older ones.
-        $pre = $this->github->latestPrerelease($owner, $repo);
+        $pre = $host->latestPrerelease($owner, $repo);
         if (!$pre) {
             Console::line("  no prerelease found");
         } elseif ($latest && ($pre['published_at'] ?? '') <= ($latest['published_at'] ?? '')) {
             Console::line("  latest prerelease {$pre['tag_name']} is older than the stable release, skipping");
         } else {
-            $this->downloader->process($pre, $repo);
+            $this->downloader->process($host, $pre, $repo);
         }
     }
 }

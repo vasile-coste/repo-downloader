@@ -1,8 +1,9 @@
 <?php
 /**
- * GitHub release asset scraper.
+ * Release asset scraper for GitHub, Gitea/Forgejo and GitLab repos.
  *
- * Reads repos.json and, for each repository, downloads into {Repo}/{version}/
+ * Reads github.json and gitlab.json (any repo URL works in either; the host is
+ * detected from the URL) and, for each repository, downloads into {Repo}/{version}/
  * the source code zip and the platform builds configured in config.php
  * (by default Windows x64 + arm64, macOS universal, Android arm64).
  *
@@ -17,7 +18,7 @@
  *
  *   --dry-run   only print what would be downloaded
  *   --out=DIR   output directory (default: download/ next to the script)
- *   --repos=FILE repos list (default: repos.json next to the script)
+ *   --repos=FILES  repo lists, comma separated (default: github.json and gitlab.json)
  *   --config=FILE   download settings (default: config.php next to the script)
  *   --platforms=LIST only these platforms, e.g. --platforms=windows,android
  *   --arch=LIST     these architectures for every platform, e.g. --arch=arm64,x64
@@ -27,13 +28,14 @@
  * The code lives in src/ (RepoDownloader namespace); this file only wires it up.
  *
  * Set GITHUB_TOKEN in the environment to raise the API rate limit (60/h -> 5000/h).
+ * GITEA_TOKEN and GITLAB_TOKEN are used for private repos on those hosts.
  */
 
 declare(strict_types=1);
 
 use RepoDownloader\Config;
 use RepoDownloader\Console;
-use RepoDownloader\GitHub;
+use RepoDownloader\Hosts;
 use RepoDownloader\ReleaseDownloader;
 use RepoDownloader\Scraper;
 
@@ -65,17 +67,26 @@ try {
     Console::fail($e->getMessage());
 }
 
-$reposFile = $opts['repos'] ?? __DIR__ . '/repos.json';
-$repos = json_decode((string) @file_get_contents($reposFile), true);
-if (!is_array($repos)) {
-    Console::fail("Cannot read a JSON array of repo URLs from $reposFile");
+// Default: every repo list next to the script that exists. --repos takes a
+// comma-separated list of files.
+$reposFiles = isset($opts['repos'])
+    ? array_map('trim', explode(',', $opts['repos']))
+    : array_values(array_filter([__DIR__ . '/github.json', __DIR__ . '/gitlab.json'], 'is_file'));
+if (!$reposFiles) {
+    Console::fail('No repo list found: create github.json and/or gitlab.json, or pass --repos=FILE');
+}
+$repos = [];
+foreach ($reposFiles as $reposFile) {
+    $list = json_decode((string) @file_get_contents($reposFile), true);
+    if (!is_array($list)) {
+        Console::fail("Cannot read a JSON array of repo URLs from $reposFile");
+    }
+    array_push($repos, ...array_values($list));
 }
 
-$github = new GitHub(getenv('GITHUB_TOKEN') ?: null);
 $downloader = new ReleaseDownloader(
-    $github,
     $config,
     outDir: rtrim($opts['out'] ?? __DIR__ . '/download', '/'),
     dryRun: isset($opts['dry-run']),
 );
-(new Scraper($github, $downloader, prerelease: $config->prerelease))->run($repos);
+(new Scraper(new Hosts(), $downloader, prerelease: $config->prerelease))->run($repos);

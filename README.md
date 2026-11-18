@@ -1,6 +1,6 @@
 # repo-downloader
 
-A PHP script that downloads release assets from the GitHub repositories listed in `repos.json`.
+A PHP script that downloads release assets from the repositories listed in `github.json` and `gitlab.json`. GitHub, Gitea/Forgejo (e.g. Codeberg or self-hosted servers) and GitLab (gitlab.com or self-hosted) are supported, with the same download rules for all of them.
 
 For each release it downloads the source code zip and the platform builds set in [`config.php`](config.php). By default:
 
@@ -45,13 +45,17 @@ php -m | grep -E 'curl|json'
    composer install
    ```
 
-2. List the repositories in `repos.json`. Either the repo URL or its `/releases` URL works:
+2. List the repositories in `github.json` and/or `gitlab.json`. Either the repo URL or its `/releases` URL works:
 
    ```json
    [
-       "https://github.com/owner/another-repo"
+       "https://github.com/owner/another-repo",
+       "https://git.example.com/owner/repo/releases",
+       "https://gitlab.com/group/subgroup/project/-/releases"
    ]
    ```
+
+   The host type is detected from each URL, so the split between the two files is only for your own organisation: `github.com` uses the GitHub API, `gitlab.com` the GitLab API, and any other server is checked for Gitea/Forgejo (`/api/v1/version`) and otherwise treated as a self-hosted GitLab. GitLab has no prereleases, so only its stable releases are downloaded.
 
 3. Optional: set a GitHub token (see [GitHub token](#github-token)).
 
@@ -62,6 +66,7 @@ php scraper.php                   # latest release of every repo
 php scraper.php --dry-run         # list what would be downloaded, download nothing
 php scraper.php --out=/some/dir   # save downloads somewhere else
 php scraper.php --repos=other.json
+php scraper.php --repos=github.json,more.json
 php scraper.php --platforms=android            # only Android builds
 php scraper.php --platforms=windows,linux --arch=x64
 php scraper.php --no-source                    # skip the source code zip
@@ -71,7 +76,7 @@ php scraper.php --no-source                    # skip the source code zip
 |---|---|
 | `--dry-run` | Print what would be downloaded without downloading. |
 | `--out=DIR` | Output directory. Default: `download/` next to the script. |
-| `--repos=FILE` | Repo list to read. Default: `repos.json` next to the script. |
+| `--repos=FILES` | Repo lists to read, comma separated. Default: `github.json` and `gitlab.json` next to the script (whichever exist). |
 | `--config=FILE` | Download settings to use. Default: `config.php` next to the script. |
 | `--platforms=LIST` | Only download these platforms (comma separated), ignoring `enabled` in the config. |
 | `--arch=LIST` | Download these architectures (comma separated) for every platform, ignoring `arch` in the config. |
@@ -165,6 +170,10 @@ Without a token GitHub allows 60 API requests per hour. Each repo uses one or tw
    ```
 
    You can also set it permanently through the Windows settings: search for **"Edit environment variables for your account"**, click **New…**, and enter `GITHUB_TOKEN` as the name and your token as the value. Open a new terminal afterwards.
+
+### Gitea/Forgejo and GitLab tokens
+
+Public repos need no token. For private repos set `GITEA_TOKEN` (a Gitea/Forgejo access token with read access to repositories) or `GITLAB_TOKEN` (a GitLab personal access token with `read_api`), the same way as `GITHUB_TOKEN`. A token is only sent to its own server: release files linked from another host are downloaded without it.
 
 ## Troubleshooting
 

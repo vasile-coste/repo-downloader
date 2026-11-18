@@ -34,6 +34,7 @@ return [
     // Download the latest prerelease when the repo has no stable release, or
     // when the latest stable release is already downloaded and a newer
     // prerelease exists.
+    // Note: GitLab does not have a release as i know, so let it check for prerelease always.
     'prerelease' => true,
 
     // When no file of a release matches any platform below, download its first
@@ -43,7 +44,7 @@ return [
     'platforms' => [
         'windows' => [
             'enabled'  => true,
-            'arch'     => ['x64', 'arm64'],
+            'arch'     => ['x64'],// , 'arm64'
             'untagged' => 'x64',
             'fallback' => true,
             'formats'  => ['exe', 'msi', 'msix', 'appx', 'appxbundle', 'zip', '7z'],
