@@ -15,6 +15,7 @@ final class Config
         public bool $uncategorized = true,
         public bool $prerelease = true,
         public array $platforms = [],
+        public int $requestDelay = 120,
     ) {
     }
 
@@ -33,6 +34,7 @@ final class Config
             uncategorized: (bool) ($data['uncategorized'] ?? true),
             prerelease: (bool) ($data['prerelease'] ?? true),
             platforms: $platforms,
+            requestDelay: max(0, (int) ($data['request_delay'] ?? 120)),
         );
     }
 

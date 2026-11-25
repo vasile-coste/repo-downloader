@@ -15,6 +15,7 @@
  * Usage:
  *   php scraper.php [--dry-run] [--out=DIR] [--repos=FILE] [--config=FILE]
  *                   [--platforms=LIST] [--arch=LIST] [--no-source] [--no-prerelease]
+ *                   [--delay=SECONDS]
  *
  *   --dry-run   only print what would be downloaded
  *   --out=DIR   output directory (default: download/ next to the script)
@@ -24,6 +25,8 @@
  *   --arch=LIST     these architectures for every platform, e.g. --arch=arm64,x64
  *   --no-source     skip the source code zip
  *   --no-prerelease never fall back to the latest prerelease
+ *   --delay=SECONDS pause between requests to the same non-GitHub server
+ *                   (default: request_delay in config.php, 120; 0 = none)
  *
  * The code lives in src/ (RepoDownloader namespace); this file only wires it up.
  *
@@ -46,7 +49,7 @@ if (PHP_VERSION_ID < 80400) {
 
 require __DIR__ . '/vendor/autoload.php';
 
-$opts = getopt('', ['dry-run', 'out:', 'repos:', 'config:', 'platforms:', 'arch:', 'no-source', 'no-prerelease']);
+$opts = getopt('', ['dry-run', 'out:', 'repos:', 'config:', 'platforms:', 'arch:', 'no-source', 'no-prerelease', 'delay:']);
 $csv = fn(string $value) => array_values(array_filter(array_map(fn($v) => strtolower(trim($v)), explode(',', $value))));
 
 try {
@@ -56,6 +59,12 @@ try {
     }
     if (isset($opts['no-prerelease'])) {
         $config->prerelease = false;
+    }
+    if (isset($opts['delay'])) {
+        if (!ctype_digit((string) $opts['delay'])) {
+            throw new RuntimeException('--delay must be a whole number of seconds');
+        }
+        $config->requestDelay = (int) $opts['delay'];
     }
     if (isset($opts['platforms'])) {
         $config->onlyPlatforms($csv($opts['platforms']));
@@ -89,4 +98,4 @@ $downloader = new ReleaseDownloader(
     outDir: rtrim($opts['out'] ?? __DIR__ . '/download', '/'),
     dryRun: isset($opts['dry-run']),
 );
-(new Scraper(new Hosts(), $downloader, prerelease: $config->prerelease))->run($repos);
+(new Scraper(new Hosts($config->requestDelay), $downloader, prerelease: $config->prerelease))->run($repos);

@@ -7,9 +7,9 @@ namespace RepoDownloader;
 /** Gitea / Forgejo / Codeberg API (v1). Its releases are already close to GitHub's. */
 final class Gitea extends ReleaseHost
 {
-    public function __construct(string $baseUrl, ?string $token = null)
+    public function __construct(string $baseUrl, ?string $token = null, int $requestDelay = 0)
     {
-        parent::__construct(rtrim($baseUrl, '/') . '/api/v1', $token);
+        parent::__construct(rtrim($baseUrl, '/') . '/api/v1', $token, $requestDelay);
     }
 
     public function latestRelease(string $owner, string $repo): ?array

@@ -20,6 +20,11 @@ final class Hosts
     /** @var array<string, ReleaseHost> */
     private array $hosts = [];
 
+    /** @param int $requestDelay seconds between requests to the same non-GitHub server */
+    public function __construct(private readonly int $requestDelay = 0)
+    {
+    }
+
     /** @return ?array{host: ReleaseHost, owner: string, repo: string} null for an unrecognised URL */
     public function resolve(string $url): ?array
     {
@@ -48,19 +53,19 @@ final class Hosts
     {
         return match (true) {
             $host === 'github.com' || $host === 'www.github.com' => new GitHub(self::env('GITHUB_TOKEN')),
-            $host === 'gitlab.com'                               => new GitLab($base, self::env('GITLAB_TOKEN')),
-            self::isGitea($base)                                 => new Gitea($base, self::env('GITEA_TOKEN')),
-            default                                              => new GitLab($base, self::env('GITLAB_TOKEN')),
+            $host === 'gitlab.com'                               => new GitLab($base, self::env('GITLAB_TOKEN'), $this->requestDelay),
+            $this->isGitea($base)                                => new Gitea($base, self::env('GITEA_TOKEN'), $this->requestDelay),
+            default                                              => new GitLab($base, self::env('GITLAB_TOKEN'), $this->requestDelay),
         };
     }
 
-    private static function isGitea(string $base): bool
+    private function isGitea(string $base): bool
     {
         try {
-            $response = (new Client())->get("$base/api/v1/version", [
+            $response = Throttle::run($base, $this->requestDelay, fn() => (new Client())->get("$base/api/v1/version", [
                 RequestOptions::TIMEOUT     => 15,
                 RequestOptions::HTTP_ERRORS => false,
-            ]);
+            ]));
         } catch (GuzzleException) {
             return false;
         }

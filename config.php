@@ -41,6 +41,11 @@ return [
     // asset as "{repo}-{version}-uncategorized.zip".
     'uncategorized' => true,
 
+    // Seconds to wait between requests to the same Gitea/Forgejo/GitLab server
+    // (API calls and downloads), as some of them answer HTTP 403 when hit too
+    // often. GitHub is never throttled. 0 turns it off.
+    'request_delay' => 120,
+
     'platforms' => [
         'windows' => [
             'enabled'  => true,

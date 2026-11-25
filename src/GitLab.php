@@ -10,9 +10,9 @@ namespace RepoDownloader;
  */
 final class GitLab extends ReleaseHost
 {
-    public function __construct(string $baseUrl, ?string $token = null)
+    public function __construct(string $baseUrl, ?string $token = null, int $requestDelay = 0)
     {
-        parent::__construct(rtrim($baseUrl, '/') . '/api/v4', $token);
+        parent::__construct(rtrim($baseUrl, '/') . '/api/v4', $token, $requestDelay);
     }
 
     /** $owner may contain subgroups ("group/subgroup"). The API lists releases newest first. */

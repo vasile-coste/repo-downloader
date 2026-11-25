@@ -26,9 +26,13 @@ abstract class ReleaseHost
     /**
      * @param string  $api   API base URL, without a trailing slash
      * @param ?string $token sent only to the API's own host
+     * @param int     $requestDelay seconds to wait between requests to this server (0 = none)
      */
-    public function __construct(protected readonly string $api, protected readonly ?string $token = null)
-    {
+    public function __construct(
+        protected readonly string $api,
+        protected readonly ?string $token = null,
+        protected readonly int $requestDelay = 0,
+    ) {
         // Guzzle follows redirects and drops the Authorization header when a
         // redirect leaves the original host (asset downloads redirect to a CDN).
         $this->http = new Client([RequestOptions::ALLOW_REDIRECTS => ['max' => 10]]);
@@ -48,13 +52,13 @@ abstract class ReleaseHost
     {
         $tmp = "$target.part";
         try {
-            $this->http->get($url, [
+            Throttle::run($url, $this->requestDelay, fn() => $this->http->get($url, [
                 RequestOptions::SINK            => $tmp,
                 RequestOptions::HEADERS         => $this->headers($isAsset ? 'application/octet-stream' : '*/*', $this->isOwnHost($url)),
                 RequestOptions::CONNECT_TIMEOUT => 30,
                 // Abort when the transfer stalls below 1 KB/s for 60 s.
                 'curl'                          => [CURLOPT_LOW_SPEED_LIMIT => 1024, CURLOPT_LOW_SPEED_TIME => 60],
-            ]);
+            ]));
         } catch (GuzzleException $e) {
             @unlink($tmp);
             throw new RuntimeException("download failed: " . $e->getMessage());
@@ -66,11 +70,11 @@ abstract class ReleaseHost
     protected function get(string $path): array
     {
         try {
-            $response = $this->http->get($this->api . $path, [
+            $response = Throttle::run($this->api, $this->requestDelay, fn() => $this->http->get($this->api . $path, [
                 RequestOptions::HEADERS     => $this->headers('application/json', true),
                 RequestOptions::TIMEOUT     => 30,
                 RequestOptions::HTTP_ERRORS => false,
-            ]);
+            ]));
         } catch (GuzzleException $e) {
             throw new RuntimeException("API request failed: " . $e->getMessage());
         }
